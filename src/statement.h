@@ -14,6 +14,9 @@
 #include <sqlite3.h>
 #include <nan.h>
 
+#define SQLITE_BOOL  101
+#define SQLITE_JSON  102
+
 using namespace v8;
 using namespace node;
 
@@ -37,6 +40,12 @@ namespace Values {
         int64_t value;
     };
 
+    struct Bool : Field {
+        template <class T> inline Bool(T _name, int64_t val) :
+            Field(_name, SQLITE_BOOL), value(val) {}
+        int64_t value;
+    };
+
     struct Float : Field {
         template <class T> inline Float(T _name, double val) :
             Field(_name, SQLITE_FLOAT), value(val) {}
@@ -46,6 +55,12 @@ namespace Values {
     struct Text : Field {
         template <class T> inline Text(T _name, size_t len, const char* val) :
             Field(_name, SQLITE_TEXT), value(val, len) {}
+        std::string value;
+    };
+
+    struct Json : Field {
+        template <class T> inline Json(T _name, size_t len, const char* val) :
+            Field(_name, SQLITE_JSON), value(val, len) {}
         std::string value;
     };
 

@@ -6,6 +6,7 @@
 #include "macros.h"
 #include "database.h"
 #include "statement.h"
+#include "v8_json.cc"
 
 using namespace node_sqlite3;
 
@@ -765,8 +766,18 @@ Local<Object> Statement::RowToJS(Row* row) {
             case SQLITE_FLOAT: {
                 value = Nan::New<Number>(((Values::Float*)field)->value);
             } break;
+            case SQLITE_BOOL: {
+                if (((Values::Integer*)field)->value == 0)
+                    value = Nan::New<Boolean>(false);
+                else
+                    value = Nan::New<Boolean>(true);
+            } break;
             case SQLITE_TEXT: {
                 value = Nan::New<String>(((Values::Text*)field)->value.c_str(), ((Values::Text*)field)->value.size()).ToLocalChecked();
+            } break;
+            case SQLITE_JSON: {
+                //value = v8::JSON::Parse(((Values::Text*)field)->value);
+                value = json_parse_or_raw(((Values::Text*)field)->value);
             } break;
             case SQLITE_BLOB: {
                 value = Nan::CopyBuffer(((Values::Blob*)field)->value, ((Values::Blob*)field)->length).ToLocalChecked();
@@ -785,14 +796,18 @@ Local<Object> Statement::RowToJS(Row* row) {
 }
 
 void Statement::GetRow(Row* row, sqlite3_stmt* stmt) {
-    int rows = sqlite3_column_count(stmt);
+    int cols = sqlite3_column_count(stmt);
 
-    for (int i = 0; i < rows; i++) {
+    for (int i = 0; i < cols; i++) {
         int type = sqlite3_column_type(stmt, i);
         const char* name = sqlite3_column_name(stmt, i);
+        const char* decltype = sqlite3_column_decltype(stmt, i);
         switch (type) {
             case SQLITE_INTEGER: {
-                row->push_back(new Values::Integer(name, sqlite3_column_int64(stmt, i)));
+                if (dectype && strncasecmp(decltype, "BOOL", 4) == 0)
+                    row->push_back(new Values::Bool(name, sqlite3_column_int64(stmt, i)));
+                else
+                    row->push_back(new Values::Integer(name, sqlite3_column_int64(stmt, i)));
             }   break;
             case SQLITE_FLOAT: {
                 row->push_back(new Values::Float(name, sqlite3_column_double(stmt, i)));
@@ -800,7 +815,10 @@ void Statement::GetRow(Row* row, sqlite3_stmt* stmt) {
             case SQLITE_TEXT: {
                 const char* text = (const char*)sqlite3_column_text(stmt, i);
                 int length = sqlite3_column_bytes(stmt, i);
-                row->push_back(new Values::Text(name, length, text));
+                if (dectype && strcasecmp(decltype, "JSON") == 0)
+                    row->push_back(new Values::Json(name, length, text));
+                else
+                    row->push_back(new Values::Text(name, length, text));
             } break;
             case SQLITE_BLOB: {
                 const void* blob = sqlite3_column_blob(stmt, i);
